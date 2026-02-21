@@ -11,4 +11,8 @@ database = client["tomato_disease"]
 
 disease_collection = database["diseases"]
  #the database collection
- 
+def get_disease_info(disease_name):
+    return disease_collection.find_one(
+        {"name": disease_name},
+        {"_id": 0}
+    )
