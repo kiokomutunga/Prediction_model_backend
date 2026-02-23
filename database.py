@@ -11,6 +11,8 @@ database = client["tomato_disease"]
 
 disease_collection = database["diseases"]
 
+prediction_collection = database["prediction"]
+
 def get_disease_info(disease_name):
     return disease_collection.find_one(
         {"name": disease_name},

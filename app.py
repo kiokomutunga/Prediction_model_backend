@@ -77,11 +77,7 @@ async def predict(file: UploadFile = File(...)):
     predicted_class = CLASS_NAMES[class_index]
 
     #fetch disease information
-    disease_info = disease_collection.find_one(
-        {"name": predicted_class},
-        {"_id":0}
-
-    )
+    
 
     if confidence < CONFIDENCE_THRESHOLD:
         return {
@@ -95,7 +91,7 @@ async def predict(file: UploadFile = File(...)):
         "prediction": predicted_class,
         "confidence": round(confidence,4),
         "image_path": file_path,
-        "disease_info": disease_info
+        "disease_info": get_disease_info
     }
 
 
