@@ -8,8 +8,8 @@ import io
 import os
 import uuid
 from database import get_disease_info
-from database import disease_collection
-
+from database import disease_collection, prediction_collection
+from datetime import datetime
 
 app = FastAPI(title="Tomato Disease Detection API")
 
@@ -77,8 +77,7 @@ async def predict(file: UploadFile = File(...)):
     predicted_class = CLASS_NAMES[class_index]
 
     #fetch disease information
-    
-
+      
     if confidence < CONFIDENCE_THRESHOLD:
         return {
             "prediction": "Unknown",
@@ -86,12 +85,22 @@ async def predict(file: UploadFile = File(...)):
             "image_path": file_path,
             "disease_info": None
         }
-
+    prediction_record = {
+        "prediction": predicted_class,
+        "confidence": round(confidence * 100, 2),
+        "image_path": file_path,
+        "timestamp": datetime.utcnow()
+    }
+    prediction_collection.insert_one(prediction_record)
+    
     return {
         "prediction": predicted_class,
         "confidence": round(confidence,4),
         "image_path": file_path,
         "disease_info": get_disease_info
     }
+
+
+    
 
 
