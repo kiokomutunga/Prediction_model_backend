@@ -1,131 +1,162 @@
 from database import disease_collection
 
 sample_data = [
-
     {
-        "name": "Bacterial_spot",
+        "key"         : "Bacterial_spot",
+        "name"        : "Bacterial Spot",
+        "severity"    : "High",
         "scientific_name": "Xanthomonas campestris pv. vesicatoria",
-        "symptoms": "Small water-soaked lesions on leaves that turn dark brown or black with yellow halos. Severe infection may cause leaf drop.",
-        "causes": "Bacterial infection spread by splashing water, contaminated tools, and infected seeds under warm and humid conditions.",
-        "treatment": "Application of copper-based bactericides and removal of infected plant debris.",
-        "prevention": "Use certified disease-free seeds, avoid overhead irrigation, and practice crop rotation.",
-        "references": [
+        "description" : "A bacterial infection causing dark, water-soaked spots on leaves, stems and fruit. Spreads rapidly in warm, wet conditions.",
+        "symptoms"    : "Small, dark brown spots with yellow halos on leaves. Spots may merge causing leaf drop. Fruit shows raised, scab-like lesions.",
+        "treatment"   : "Apply copper-based bactericides. Remove and destroy infected plant material. Avoid overhead irrigation.",
+        "prevention"  : "Use certified disease-free seeds. Rotate crops every 2-3 years. Maintain proper plant spacing for airflow.",
+        "causes"      : "Bacterial infection spread by splashing water, contaminated tools, and infected seeds under warm and humid conditions.",
+        "references"  : [
             "FAO Plant Protection Guide (2022)",
             "Journal of Plant Pathology Research (2021)"
-        ]
+        ],
     },
-
     {
-        "name": "Early_blight",
+        "key"         : "Early_blight",
+        "name"        : "Early Blight",
+        "severity"    : "Medium",
         "scientific_name": "Alternaria solani",
-        "symptoms": "Dark concentric rings forming target-like spots on older leaves, often surrounded by yellowing tissue.",
-        "causes": "Fungal pathogen thriving in warm, humid environments and plant stress conditions.",
-        "treatment": "Application of fungicides such as chlorothalonil or mancozeb.",
-        "prevention": "Crop rotation, removal of infected leaves, and proper plant spacing.",
-        "references": [
+        "description" : "A fungal disease caused by Alternaria solani, affecting older leaves first then spreading upward through the plant.",
+        "symptoms"    : "Dark brown spots with concentric rings forming a target-like pattern. Yellow tissue surrounds spots. Lower leaves affected first.",
+        "treatment"   : "Apply chlorothalonil or mancozeb fungicide. Remove infected leaves. Ensure adequate plant nutrition.",
+        "prevention"  : "Mulch around plants. Avoid wetting foliage. Practice crop rotation. Plant resistant varieties.",
+        "causes"      : "Fungal pathogen thriving in warm, humid environments and plant stress conditions.",
+        "references"  : [
             "FAO Crop Disease Manual (2022)",
             "Plant Disease Journal (2021)"
-        ]
+        ],
     },
-
     {
-        "name": "Late_blight",
+        "key"         : "Late_blight",
+        "name"        : "Late Blight",
+        "severity"    : "Critical",
         "scientific_name": "Phytophthora infestans",
-        "symptoms": "Large water-soaked lesions that rapidly enlarge, leading to leaf collapse and fruit rot.",
-        "causes": "Oomycete pathogen favored by cool, wet conditions.",
-        "treatment": "Use of systemic fungicides and copper-based sprays.",
-        "prevention": "Plant resistant varieties and ensure proper field drainage.",
-        "references": [
-            "International Plant Protection Convention Report (2022)"
-        ]
+        "description" : "Caused by Phytophthora infestans — the same pathogen responsible for the Irish potato famine. Can destroy crops within days.",
+        "symptoms"    : "Large, irregular grey-green water-soaked lesions. White mould on leaf undersides in humid conditions. Rapid plant collapse.",
+        "treatment"   : "Apply metalaxyl or cymoxanil immediately. Remove and bag infected plants. Do not compost infected material.",
+        "prevention"  : "Avoid overhead irrigation. Plant in well-drained soil. Monitor weather forecasts for blight risk days.",
+        "causes"      : "Oomycete pathogen favored by cool, wet conditions. Can spread explosively in humid weather.",
+        "references"  : [
+            "International Plant Protection Convention Report (2022)",
+            "Fry, W. (2008). Phytophthora infestans. Molecular Plant Pathology."
+        ],
     },
-
     {
-        "name": "Leaf_Mold",
+        "key"         : "Leaf_Mold",
+        "name"        : "Leaf Mold",
+        "severity"    : "Medium",
         "scientific_name": "Passalora fulva",
-        "symptoms": "Yellow patches on upper leaf surfaces and olive-green mold on the underside.",
-        "causes": "Fungal infection common in greenhouse conditions with high humidity.",
-        "treatment": "Application of appropriate fungicides and improved air circulation.",
-        "prevention": "Reduce humidity levels and ensure adequate plant spacing.",
-        "references": [
-            "Greenhouse Crop Protection Handbook (2021)"
-        ]
+        "description" : "A fungal disease thriving in high humidity greenhouse environments, caused by Passalora fulva.",
+        "symptoms"    : "Pale green to yellow spots on upper leaf surface. Olive-green to brown velvety mould on lower surface.",
+        "treatment"   : "Improve ventilation. Apply fungicides containing chlorothalonil. Remove severely infected leaves.",
+        "prevention"  : "Reduce humidity below 85%. Increase air circulation. Avoid leaf wetness. Use resistant varieties.",
+        "causes"      : "Fungal infection common in greenhouse conditions with high humidity and poor air circulation.",
+        "references"  : [
+            "Greenhouse Crop Protection Handbook (2021)",
+            "Laterrot, H. (1986). Breeding for resistance to leaf mould."
+        ],
     },
-
     {
-        "name": "Septoria_leaf_spot",
+        "key"         : "Septoria_leaf_spot",
+        "name"        : "Septoria Leaf Spot",
+        "severity"    : "Medium",
         "scientific_name": "Septoria lycopersici",
-        "symptoms": "Small circular spots with dark borders and light gray centers, typically on lower leaves.",
-        "causes": "Fungal infection promoted by wet foliage and poor air circulation.",
-        "treatment": "Use of protective fungicides and removal of infected leaves.",
-        "prevention": "Crop rotation and avoiding overhead irrigation.",
-        "references": [
-            "FAO Plant Health Bulletin (2022)"
-        ]
+        "description" : "One of the most common and damaging tomato diseases, caused by the fungus Septoria lycopersici.",
+        "symptoms"    : "Small, circular spots with dark borders and light grey centres. Tiny black dots visible in spot centres.",
+        "treatment"   : "Apply copper fungicide or chlorothalonil. Remove lower infected leaves. Stake plants for better airflow.",
+        "prevention"  : "Avoid overhead watering. Mulch soil surface. Practice 3-year crop rotation.",
+        "causes"      : "Fungal infection promoted by wet foliage and poor air circulation. Spreads via rain splash.",
+        "references"  : [
+            "FAO Plant Health Bulletin (2022)",
+            "Basu, P.K. (1974). Overwintering of Septoria lycopersici. Canadian Plant Disease Survey."
+        ],
     },
-
     {
-        "name": "Spider_mites",
+        "key"         : "Spider_mites",
+        "name"        : "Spider Mites",
+        "severity"    : "Medium",
         "scientific_name": "Tetranychus urticae",
-        "symptoms": "Yellow speckling on leaves, webbing on undersides, and eventual leaf drying.",
-        "causes": "Infestation by microscopic mites in hot and dry conditions.",
-        "treatment": "Application of miticides and regular leaf washing.",
-        "prevention": "Maintain proper humidity and introduce biological control agents.",
-        "references": [
-            "Integrated Pest Management Guide (2021)"
-        ]
+        "description" : "Tiny arachnids, not insects, that feed on plant cells. Thrive in hot, dry conditions and reproduce rapidly.",
+        "symptoms"    : "Fine webbing on leaf undersides. Tiny yellow or white stippling on leaves. Leaves turn bronze and drop.",
+        "treatment"   : "Apply miticide or insecticidal soap. Spray water forcefully on undersides of leaves. Introduce predatory mites.",
+        "prevention"  : "Maintain adequate soil moisture. Avoid dusty conditions. Monitor plants regularly in hot weather.",
+        "causes"      : "Infestation by microscopic mites in hot and dry conditions. Population explodes rapidly above 27°C.",
+        "references"  : [
+            "Integrated Pest Management Guide (2021)",
+            "Helle, W. & Sabelis, M.W. (1985). Spider Mites: Their Biology. Elsevier."
+        ],
     },
-
     {
-        "name": "Target_Spot",
+        "key"         : "Target_Spot",
+        "name"        : "Target Spot",
+        "severity"    : "Medium",
         "scientific_name": "Corynespora cassiicola",
-        "symptoms": "Brown circular lesions with concentric rings on leaves and fruits.",
-        "causes": "Fungal pathogen spread through rain splash and contaminated debris.",
-        "treatment": "Fungicide application and removal of infected plant material.",
-        "prevention": "Proper sanitation and crop rotation practices.",
-        "references": [
-            "Crop Protection Science Review (2022)"
-        ]
+        "description" : "Caused by the fungus Corynespora cassiicola, affecting leaves, stems and fruit in warm humid climates.",
+        "symptoms"    : "Circular brown lesions with concentric rings. Lesions may have yellow margins. Affected leaves drop prematurely.",
+        "treatment"   : "Apply azoxystrobin or chlorothalonil. Remove infected leaves. Avoid high humidity around plants.",
+        "prevention"  : "Ensure good air circulation. Avoid overhead irrigation. Practice crop rotation.",
+        "causes"      : "Fungal pathogen spread through rain splash and contaminated debris. Favoured by warm humid conditions.",
+        "references"  : [
+            "Crop Protection Science Review (2022)",
+            "Jones, J.B. (1991). Target spot of tomato. Florida Cooperative Extension Service."
+        ],
     },
-
     {
-        "name": "Tomato_Yellow_Leaf_Curl_Virus",
+        "key"         : "Tomato_Yellow_Leaf_Curl_Virus",
+        "name"        : "Yellow Leaf Curl Virus",
+        "severity"    : "Critical",
         "scientific_name": "Tomato yellow leaf curl virus (TYLCV)",
-        "symptoms": "Upward curling of leaves, yellowing, and stunted plant growth.",
-        "causes": "Viral infection transmitted by whiteflies.",
-        "treatment": "No direct cure; control whitefly populations.",
-        "prevention": "Use resistant varieties and implement vector management strategies.",
-        "references": [
-            "International Journal of Virology (2021)"
-        ]
+        "description" : "A viral disease transmitted by whiteflies that causes severe yield loss. No cure exists once infected.",
+        "symptoms"    : "Upward curling and yellowing of leaves. Stunted growth. Flower drop and poor fruit set.",
+        "treatment"   : "No cure. Remove and destroy infected plants immediately to prevent spread. Control whitefly populations.",
+        "prevention"  : "Use whitefly-resistant varieties. Install insect-proof nets. Apply reflective mulch. Use yellow sticky traps.",
+        "causes"      : "Viral infection transmitted exclusively by silverleaf whitefly Bemisia tabaci.",
+        "references"  : [
+            "International Journal of Virology (2021)",
+            "Moriones, E. & Navas-Castillo, J. (2000). Tomato yellow leaf curl virus. Virus Research."
+        ],
     },
-
     {
-        "name": "Tomato_mosaic_virus",
+        "key"         : "Tomato_mosaic_virus",
+        "name"        : "Mosaic Virus",
+        "severity"    : "High",
         "scientific_name": "Tomato mosaic virus (ToMV)",
-        "symptoms": "Mottled light and dark green patterns on leaves and reduced fruit yield.",
-        "causes": "Viral infection spread through contaminated tools and human contact.",
-        "treatment": "Remove infected plants and disinfect tools.",
-        "prevention": "Use certified seeds and maintain strict field hygiene.",
-        "references": [
-            "Plant Virology Handbook (2022)"
-        ]
+        "description" : "A highly contagious viral disease spread by contact, tools and hands. Can persist in soil for years.",
+        "symptoms"    : "Mottled light and dark green mosaic pattern on leaves. Leaf distortion and curling. Stunted plant growth.",
+        "treatment"   : "No cure. Remove infected plants. Disinfect all tools with bleach solution after use.",
+        "prevention"  : "Wash hands before handling plants. Disinfect tools regularly. Do not smoke near plants — tobacco carries the virus.",
+        "causes"      : "Viral infection spread through contaminated tools, hands, and clothing. Does not require an insect vector.",
+        "references"  : [
+            "Plant Virology Handbook (2022)",
+            "Lewandowski, D.J. (2000). Tobamovirus. Encyclopedia of Plant Pathology."
+        ],
     },
-
     {
-        "name": "Healthy",
+        "key"         : "Healthy",
+        "name"        : "Healthy",
+        "severity"    : "None",
         "scientific_name": "N/A",
-        "symptoms": "Leaves appear uniformly green with no visible lesions or discoloration.",
-        "causes": "No infection detected.",
-        "treatment": "No treatment required.",
-        "prevention": "Maintain proper irrigation, nutrition, and pest monitoring.",
-        "references": [
-            "General Tomato Cultivation Guide (2022)"
-        ]
-    }
-
+        "description" : "The leaf shows no signs of disease, pest damage or nutrient deficiency. The plant is in good condition.",
+        "symptoms"    : "Deep green uniform colour. No spots, lesions or abnormal patterns. Normal leaf shape and texture.",
+        "treatment"   : "No treatment needed. Continue regular watering, feeding and monitoring.",
+        "prevention"  : "Maintain good cultural practices — proper spacing, watering, fertilisation and crop rotation.",
+        "causes"      : "No infection detected.",
+        "references"  : [
+            "General Tomato Cultivation Guide (2022)",
+            "FAO (2022). Good Agricultural Practices for tomato production."
+        ],
+    },
 ]
 
-disease_collection.insert_many(sample_data)
 
-print("All disease records inserted successfully.")
+disease_collection.delete_many({})
+result = disease_collection.insert_many(sample_data)
+print(f"Inserted {len(result.inserted_ids)} disease records successfully.")
+
+for disease in disease_collection.find({}, {"key": 1, "name": 1, "severity": 1, "_id": 0}):
+    print(f"  {disease['key']:40} {disease['severity']}")
