@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "model", "finaltomato_model.keras")
+MODEL_PATH = os.path.join(BASE_DIR, "model", "firstmodel.keras")
 UPLOAD_DIR=os.path.join(BASE_DIR, "uploads", "predictions")
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png" "webp"}
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png" ,"webp"}
 IMG_SIZE = (224, 224)
 CONFIDENCE_THRESHOLD= 0.905
 
