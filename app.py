@@ -8,7 +8,7 @@ from PIL import Image, UnidentifiedImageError
 from datetime import datetime, timezone
 import io, os, uuid, logging
 
-from database import get_disease_info, prediction_collection
+from database import get_disease_info, prediction_collection,get_all_diseases
 from routers.stats import router as stats_router    # ← added
 
 
@@ -166,5 +166,18 @@ async def predict(file: UploadFile = File(...)):
         "disease_info" : disease_info,
         "is_critical"  : predicted_class in CRITICAL_DISEASES,
     }
+
+@app.get("/diseases/")
+async def fetch_diseases():
+        
+    try:
+        diseases = get_all_diseases()
+        return{
+            "count": len(diseases),
+            "diseases":diseases
+            }
+    except Exception as e:
+        logger.error(f"error fetching diseases {str(e)}")
+        raise HTTPException(status_code = 400, detail= "failed to fetch diseases")
 
 
