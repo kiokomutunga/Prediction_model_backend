@@ -7,8 +7,11 @@ from tensorflow.keras.preprocessing import image as keras_image
 from PIL import Image, UnidentifiedImageError
 from datetime import datetime, timezone
 import io, os, uuid, logging
+from fastapi.responses import JSONResponse
+from bson import ObjectId
+from fastapi.staticfiles import StaticFiles
 
-from database import get_disease_info, prediction_collection
+from database import get_disease_info, prediction_collection,get_all_diseases
 from routers.stats import router as stats_router    # ← added
 
 
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model", "twolayer.keras")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "predictions")
+UPLOADS_ROOT = os.path.join(BASE_DIR, "uploads")
 
 ALLOWED_EXTENSIONS   = {"jpg", "jpeg", "png", "webp"}
 IMG_SIZE             = (256, 256)       
@@ -55,6 +59,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT), name="uploads")
 
 #Register routers
 app.include_router(stats_router)
@@ -73,11 +78,11 @@ def validate_file(filename: str) -> str:
 
 
 def save_upload(file_bytes: bytes, ext: str) -> str:
-    """Save raw bytes to disk and return the saved path."""
-    path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}.{ext}")
-    with open(path, "wb") as f:
+    filename = f"{uuid.uuid4()}.{ext}"
+    full_path = os.path.join(UPLOAD_DIR, filename)
+    with open(full_path, "wb") as f:
         f.write(file_bytes)
-    return path
+    return f"uploads/predictions/{filename}"
 
 
 def preprocess(file_bytes: bytes) -> np.ndarray:
@@ -130,10 +135,7 @@ async def predict(file: UploadFile = File(...)):
     ext = validate_file(file.filename)
 
     # 2. Read bytes once — reused for saving AND inference
-    contents = await file.read()
-
-    # 3. Save to disk
-    image_path = save_upload(contents, ext)
+    contents = await file.read()    
 
     # 4. Preprocess for the model
     img_tensor = preprocess(contents)
@@ -147,12 +149,13 @@ async def predict(file: UploadFile = File(...)):
         return {
             "prediction"   : "Unknown",
             "confidence"   : round(confidence, 4),
-            "image_path"   : image_path,
+            "image_path"   : None,
             "disease_info" : None,
-            "message"      : "Confidence too low. Please upload a clearer image of a tomato leaf.",
+            "message"      : "Confidence too low. Please upload a clearer image of a tomato leaf./ confirm whether its a tomato leaf",
         }
 
     # 7. Save confirmed prediction to MongoDB
+    image_path = save_upload(contents, ext)
     prediction_id = log_to_db(predicted_class, confidence, image_path)
 
     # 8. Fetch disease details from DB
@@ -167,4 +170,47 @@ async def predict(file: UploadFile = File(...)):
         "is_critical"  : predicted_class in CRITICAL_DISEASES,
     }
 
+@app.get("/diseases/")
+async def fetch_diseases():
+        
+    try:
+        diseases = get_all_diseases()
+        return{
+            "count": len(diseases),
+            "diseases":diseases
+            }
+    except Exception as e:
+        logger.error(f"error fetching diseases {str(e)}")
+        raise HTTPException(status_code = 400, detail= "failed to fetch diseases")
 
+
+
+@app.get("/history/scans")
+async def get_scan_history(limit: int = 50):
+    try:
+        scans_cursor = prediction_collection.find().sort("timestamp", -1).limit(limit)
+
+        scans = []
+        for scan in scans_cursor:
+            raw_path = scan["image_path"]
+            if os.path.isabs(raw_path) or "\\" in raw_path:
+                filename = os.path.basename(raw_path)
+                image_path = f"uploads/predictions/{filename}"
+            else:
+                image_path = raw_path 
+
+            scans.append({
+                "_id": str(scan["_id"]),
+                "prediction": scan["prediction"],
+                "confidence": scan["confidence"],
+                "timestamp": scan["timestamp"].isoformat(),
+                "image_path": image_path,
+                "is_critical": scan.get("is_critical", False),
+            })
+
+        total = prediction_collection.count_documents({})
+        return JSONResponse({"total": total, "scans": scans})
+
+    except Exception as e:
+        logger.error(f"Error fetching scan history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch scan history")

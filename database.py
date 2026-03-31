@@ -18,3 +18,8 @@ def get_disease_info(disease_name):
         {"name": disease_name},
         {"_id": 0}
     )
+
+def get_all_diseases():
+    return list(
+        disease_collection.find({}, {"_id": 0})
+    )
