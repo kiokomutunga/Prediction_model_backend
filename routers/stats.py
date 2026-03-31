@@ -9,7 +9,6 @@ CRITICAL_DISEASES = {
     "Tomato_Yellow_Leaf_Curl_Virus",
 }
 
-# ── Helper ────────────────────────────────────────────────────────────────────
 
 def serialize_scan(scan: dict) -> dict:
     """Convert MongoDB document to JSON-serializable dict."""
@@ -36,7 +35,7 @@ async def get_dashboard_stats():
 
     total_scans = prediction_collection.count_documents({})
 
-    # Return empty state if no scans yet
+
     if total_scans == 0:
         return {
             "total_scans"    : 0,
