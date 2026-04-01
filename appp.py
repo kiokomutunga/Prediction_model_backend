@@ -15,16 +15,16 @@ from routers.stats import router as stats_router    # ← added
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Config ────────────────────────────────────────────────────────────────────
+#
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model", "twolayer.keras")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "predictions")
 
 ALLOWED_EXTENSIONS   = {"jpg", "jpeg", "png", "webp"}
-IMG_SIZE             = (256, 256)        # ← fixed from 224 to match your model
-CONFIDENCE_THRESHOLD = 0.70             # ← fixed from 0.905 — too strict
+IMG_SIZE             = (256, 256)       
+CONFIDENCE_THRESHOLD = 0.70            
 
-CRITICAL_DISEASES = {                   # ← added for stats tracking
+CRITICAL_DISEASES = {                  
     "Late_blight",
     "Tomato_Yellow_Leaf_Curl_Virus",
 }
@@ -37,7 +37,7 @@ CLASS_NAMES = [
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ── Lifespan — load model once at startup ────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.model = load_model(MODEL_PATH, compile=False)   # ← added compile=False
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Server shutting down.")
 
-# ── App ───────────────────────────────────────────────────────────────────────
+
 app = FastAPI(title="Tomato Disease Detection API", lifespan=lifespan)
 
 app.add_middleware(
@@ -56,10 +56,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Register routers ──────────────────────────────────────────────────────────
+
 app.include_router(stats_router)        # ← added — mounts all /stats/* routes
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def validate_file(filename: str) -> str:
     """Reject unsupported file types."""
@@ -111,7 +111,7 @@ def log_to_db(predicted_class: str, confidence: float, image_path: str) -> str:
     })
     return str(result.inserted_id)
 
-# ── Predict endpoint ──────────────────────────────────────────────────────────
+
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
