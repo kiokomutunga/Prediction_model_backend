@@ -15,7 +15,7 @@ prediction_collection = database["prediction"]
 
 def get_disease_info(disease_name):
     return disease_collection.find_one(
-        {"name": disease_name},
+        {"key": disease_name},
         {"_id": 0}
     )
 
