@@ -6,46 +6,52 @@ import numpy as np
 from tensorflow.keras.preprocessing import image as keras_image
 from PIL import Image, UnidentifiedImageError
 from datetime import datetime, timezone
-
-
 import io, os, uuid, logging
+from fastapi.responses import JSONResponse
+from bson import ObjectId
+from fastapi.staticfiles import StaticFiles
+from ollama import chat as ollama_chat
+
+from database import get_disease_info, prediction_collection,get_all_diseases
+from routers.stats import router as stats_router    # ← added
 
 
-from database import get_disease_info, prediction_collection
-
-#logging for better cache
-#logs for what is going on the server
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# config
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "model", "twolayer.keras")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "predictions")
+UPLOADS_ROOT = os.path.join(BASE_DIR, "uploads")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "model", "firstmodel.keras")
-UPLOAD_DIR=os.path.join(BASE_DIR, "uploads", "predictions")
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png" ,"webp"}
-IMG_SIZE = (224, 224)
-CONFIDENCE_THRESHOLD= 0.905
+ALLOWED_EXTENSIONS   = {"jpg", "jpeg", "png", "webp"}
+IMG_SIZE             = (256, 256)       
+CONFIDENCE_THRESHOLD = 0.70            
 
-#class list of all diseases includes in the model
-#list are mutable
+CRITICAL_DISEASES = {                  
+    "Late_blight",
+    "Tomato_Yellow_Leaf_Curl_Virus",
+}
+
 CLASS_NAMES = [
     "Bacterial_spot", "Early_blight", "Late_blight", "Leaf_Mold",
     "Septoria_leaf_spot", "Spider_mites", "Target_Spot",
     "Tomato_Yellow_Leaf_Curl_Virus", "Tomato_mosaic_virus", "Healthy",
 ]
 
-#ensures this folder exists and creates it it doesnt
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-#lifespan load model once the server starts
+#Lifespan load model once at startup 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.model = load_model(MODEL_PATH)
-    logger.info("model loaded successfully")
+    app.state.model = load_model(MODEL_PATH, compile=False)   # ← added compile=False
+    logger.info("Model loaded successfully.")
     yield
-    logger.info("server shutting down")
+    logger.info("Server shutting down.")
 
-app = FastAPI(title = "Tomato Disease Detection API", lifespan=lifespan)
+#App
+app = FastAPI(title="Tomato Disease Detection API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,50 +60,64 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-#verify the uploaded image is of the stated formats
-def validate_file(filename: str) -> str:
-    """reject unsupported images"""
-    ext = filename.rsplit(".", 1)[-1].lower()
+app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT), name="uploads")
 
+#Register routers
+app.include_router(stats_router)
+
+#Helpers
+
+def validate_file(filename: str) -> str:
+    """Reject unsupported file types."""
+    ext = filename.rsplit(".", 1)[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400,detail = f"Unsupported file type '.{ext}'. allowed: {ALLOWED_EXTENSIONS}"
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '.{ext}'. Allowed: {ALLOWED_EXTENSIONS}",
         )
     return ext
 
-#function to save the uploaded image
-def save_upload(file_bytes:bytes, ext:str) -> str:
-    path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}.{ext}" )
-    with open(path, "wb") as f:
+
+def save_upload(file_bytes: bytes, ext: str) -> str:
+    filename = f"{uuid.uuid4()}.{ext}"
+    full_path = os.path.join(UPLOAD_DIR, filename)
+    with open(full_path, "wb") as f:
         f.write(file_bytes)
-    return path
+    return f"uploads/predictions/{filename}"
 
-#cpnvert raw images to model tensors
 
-def preprocess(file_bytes: bytes) ->np.ndarray :
+def preprocess(file_bytes: bytes) -> np.ndarray:
+    """Convert raw image bytes into model-ready tensor."""
     try:
         img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
     except UnidentifiedImageError:
+        raise HTTPException(status_code=400, detail="Could not decode image.")
 
-        raise HTTPException(status_code=400, detail= "could not decode image")
-    
     img = img.resize(IMG_SIZE)
-    arr = keras_image.img_to_array(img) /255.0
+    arr = keras_image.img_to_array(img) / 255.0
     return np.expand_dims(arr, axis=0)
 
-def run_inference(model, img_tensor:np.ndarray) -> tuple[str, float]:
-    preds = model.predict(img_tensor)
+
+def run_inference(model, img_tensor: np.ndarray) -> tuple[str, float]:
+    """Run model and return (class_name, confidence)."""
+    preds      = model.predict(img_tensor)
     confidence = float(np.max(preds))
-    cls = CLASS_NAMES[int(np.argmax(preds))]
+    cls        = CLASS_NAMES[int(np.argmax(preds))]
     return cls, confidence
 
-def log_to_db(predicted_class: str, confidence: float, image_path: str) -> None:
-    """Persist a prediction record to MongoDB."""
-    prediction_collection.insert_one({
-        "prediction" : predicted_class,
-        "confidence" : round(confidence * 100, 2),  # stored as percentage
-        "image_path" : image_path,
-        "timestamp"  : datetime.now(timezone.utc),  # timezone-aware UTC
+
+def log_to_db(predicted_class: str, confidence: float, image_path: str) -> str:
+    """Persist prediction to MongoDB and return the inserted ID."""
+    result = prediction_collection.insert_one({
+        "prediction"  : predicted_class,
+        "confidence"  : round(confidence * 100, 2),
+        "image_path"  : image_path,
+        "timestamp"   : datetime.now(timezone.utc),
+        "is_critical" : predicted_class in CRITICAL_DISEASES,  # ← added
     })
+    return str(result.inserted_id)
+
+#Predict endpoint
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
@@ -105,19 +125,18 @@ async def predict(file: UploadFile = File(...)):
     POST a tomato leaf image → get back the predicted disease.
 
     Returns:
-        prediction    – disease name or 'Unknown'
-        confidence    – model's certainty (0-1)
-        image_path    – where the upload was saved
-        disease_info  – treatment / symptoms from DB (None if low confidence)
+        _id          MongoDB document ID for feedback linking
+        prediction   disease name or 'Unknown'
+        confidence   model certainty (0-1)
+        image_path   where the upload was saved
+        disease_info treatment/symptoms from DB
+        is_critical  true if disease needs urgent attention
     """
     # 1. Validate file type before reading anything
     ext = validate_file(file.filename)
 
-    # 2. Read bytes once — reuse for saving AND inference
-    contents = await file.read()
-
-    # 3. Save to disk
-    image_path = save_upload(contents, ext)
+    # 2. Read bytes once — reused for saving AND inference
+    contents = await file.read()    
 
     # 4. Preprocess for the model
     img_tensor = preprocess(contents)
@@ -126,26 +145,142 @@ async def predict(file: UploadFile = File(...)):
     predicted_class, confidence = run_inference(app.state.model, img_tensor)
     logger.info(f"Prediction: {predicted_class} ({confidence:.2%})")
 
-    # 6. Low-confidence → return early, nothing saved to DB
+    # 6. Low confidence — return early, nothing saved to DB
     if confidence < CONFIDENCE_THRESHOLD:
         return {
             "prediction"   : "Unknown",
             "confidence"   : round(confidence, 4),
-            "image_path"   : image_path,
+            "image_path"   : None,
             "disease_info" : None,
-            "message"      : "Confidence too low. Please upload a clearer image of a tomato leaf.",
+            "message"      : "Confidence too low. Please upload a clearer image of a tomato leaf./ confirm whether its a tomato leaf",
         }
 
     # 7. Save confirmed prediction to MongoDB
-    log_to_db(predicted_class, confidence, image_path)
+    image_path = save_upload(contents, ext)
+    prediction_id = log_to_db(predicted_class, confidence, image_path)
 
-    # 8. Fetch disease details from DB  ← was a bug: missing ()
+    # 8. Fetch disease details from DB
     disease_info = get_disease_info(predicted_class)
 
     return {
+        "_id"          : prediction_id,
         "prediction"   : predicted_class,
         "confidence"   : round(confidence, 4),
         "image_path"   : image_path,
         "disease_info" : disease_info,
+        "is_critical"  : predicted_class in CRITICAL_DISEASES,
     }
 
+@app.get("/diseases/")
+async def fetch_diseases():
+        
+    try:
+        diseases = get_all_diseases()
+        return{
+            "count": len(diseases),
+            "diseases":diseases
+            }
+    except Exception as e:
+        logger.error(f"error fetching diseases {str(e)}")
+        raise HTTPException(status_code = 400, detail= "failed to fetch diseases")
+
+
+
+@app.get("/history/scans")
+async def get_scan_history(limit: int = 50):
+    try:
+        scans_cursor = prediction_collection.find().sort("timestamp", -1).limit(limit)
+
+        scans = []
+        for scan in scans_cursor:
+            raw_path = scan["image_path"]
+            if os.path.isabs(raw_path) or "\\" in raw_path:
+                filename = os.path.basename(raw_path)
+                image_path = f"uploads/predictions/{filename}"
+            else:
+                image_path = raw_path 
+
+            scans.append({
+                "_id": str(scan["_id"]),
+                "prediction": scan["prediction"],
+                "confidence": scan["confidence"],
+                "timestamp": scan["timestamp"].isoformat(),
+                "image_path": image_path,
+                "is_critical": scan.get("is_critical", False),
+            })
+
+        total = prediction_collection.count_documents({})
+        return JSONResponse({"total": total, "scans": scans})
+
+    except Exception as e:
+        logger.error(f"Error fetching scan history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch scan history")
+
+
+@app.post("/chat")
+async def chat_endpoint(req: dict):
+    messages     = req.get("messages", [])
+    disease_ctx  = req.get("diseaseContext")
+    session_id   = req.get("sessionId")
+
+    # Build system prompt
+    if disease_ctx:
+        system = f"""You are an expert tomato disease assistant helping farmers.
+The AI model detected:
+- Disease: {disease_ctx.get('prediction')}
+- Confidence: {disease_ctx.get('confidence', 0) * 100:.1f}%
+- Description: {disease_ctx.get('disease_info', {}).get('description', 'N/A')}
+- Symptoms: {disease_ctx.get('disease_info', {}).get('symptoms', 'N/A')}
+- Treatment: {disease_ctx.get('disease_info', {}).get('treatment', 'N/A')}
+- Prevention: {disease_ctx.get('disease_info', {}).get('prevention', 'N/A')}
+
+Give practical farming advice. Keep responses concise."""
+    else:
+        system = """You are a helpful tomato disease expert.
+No image has been analysed yet. Encourage the user to upload a tomato leaf image.
+You can still answer general tomato disease questions."""
+
+    # Format messages for ollama
+    ollama_messages = [{"role": "system", "content": system}]
+    for m in messages:
+        ollama_messages.append({"role": m["role"], "content": m["content"]})
+
+    try:
+        response = ollama_chat(
+            model="llama3.2",
+            messages=ollama_messages,
+        )
+        reply = response["message"]["content"]
+    except Exception as e:
+        logger.error(f"Ollama error: {e}")
+        raise HTTPException(status_code=500, detail="Llama model error")
+
+    # Save to MongoDB
+    prediction_collection.database["chat_sessions"].update_one(
+        {"session_id": session_id},
+        {
+            "$set":        {"updated_at": datetime.now(timezone.utc), "disease_context": disease_ctx},
+            "$push":       {"messages": {"$each": [messages[-1], {"role": "assistant", "content": reply}]}},
+            "$setOnInsert":{"session_id": session_id, "created_at": datetime.now(timezone.utc)},
+        },
+        upsert=True,
+    )
+
+    return {"reply": reply}
+
+#api route for chat history
+@app.get("/chat/history")
+async def chat_history(sessionId: str = None):
+    db = prediction_collection.database
+
+    if sessionId:
+        session = db["chat_sessions"].find_one({"session_id": sessionId})
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session["_id"] = str(session["_id"])
+        return session
+
+    sessions = list(db["chat_sessions"].find().sort("created_at", -1).limit(20))
+    for s in sessions:
+        s["_id"] = str(s["_id"])
+    return sessions
