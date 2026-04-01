@@ -12,7 +12,7 @@ from bson import ObjectId
 from fastapi.staticfiles import StaticFiles
 from ollama import chat as ollama_chat
 
-from database import get_disease_info, prediction_collection,get_all_diseases
+from database import get_disease_info, prediction_collection, get_all_diseases,  get_disease_for_scan,    get_chat_by_scan, chat_collection
 from routers.stats import router as stats_router    # ← added
 
 
@@ -183,7 +183,19 @@ async def fetch_diseases():
     except Exception as e:
         logger.error(f"error fetching diseases {str(e)}")
         raise HTTPException(status_code = 400, detail= "failed to fetch diseases")
-
+@app.get("/diseases/{key}")
+async def fetch_disease_by_key(key: str):
+    """Fetch a single disease by its key e.g. Early_blight, Healthy"""
+    try:
+        disease = get_disease_info(key)
+        if not disease:
+            raise HTTPException(status_code=404, detail=f"Disease '{key}' not found in database.")
+        return disease
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching disease {key}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch disease")
 
 
 @app.get("/history/scans")
@@ -200,6 +212,10 @@ async def get_scan_history(limit: int = 50):
             else:
                 image_path = raw_path 
 
+            chat_exists = prediction_collection.database["chat_sessions"].count_documents({
+            "scan_id": str(scan["_id"])
+        }) > 0
+
             scans.append({
                 "_id": str(scan["_id"]),
                 "prediction": scan["prediction"],
@@ -207,6 +223,7 @@ async def get_scan_history(limit: int = 50):
                 "timestamp": scan["timestamp"].isoformat(),
                 "image_path": image_path,
                 "is_critical": scan.get("is_critical", False),
+                "has_chat": chat_exists ,
             })
 
         total = prediction_collection.count_documents({})
@@ -219,9 +236,21 @@ async def get_scan_history(limit: int = 50):
 
 @app.post("/chat")
 async def chat_endpoint(req: dict):
-    messages     = req.get("messages", [])
-    disease_ctx  = req.get("diseaseContext")
-    session_id   = req.get("sessionId")
+    messages    = req.get("messages", [])
+    disease_ctx = req.get("diseaseContext")
+    session_id  = req.get("sessionId")
+    scan_id     = req.get("scanId")
+
+    # If no disease context came from frontend, fetch it from DB using scan_id
+    if not disease_ctx and scan_id:
+        scan = prediction_collection.find_one({"_id": __import__("bson").ObjectId(scan_id)})
+        if scan:
+            disease_info = get_disease_for_scan(scan["prediction"])
+            disease_ctx  = {
+                "prediction"  : scan["prediction"],
+                "confidence"  : scan["confidence"] / 100,
+                "disease_info": disease_info,
+            }
 
     # Build system prompt
     if disease_ctx:
@@ -229,10 +258,10 @@ async def chat_endpoint(req: dict):
 The AI model detected:
 - Disease: {disease_ctx.get('prediction')}
 - Confidence: {disease_ctx.get('confidence', 0) * 100:.1f}%
-- Description: {disease_ctx.get('disease_info', {}).get('description', 'N/A')}
-- Symptoms: {disease_ctx.get('disease_info', {}).get('symptoms', 'N/A')}
-- Treatment: {disease_ctx.get('disease_info', {}).get('treatment', 'N/A')}
-- Prevention: {disease_ctx.get('disease_info', {}).get('prevention', 'N/A')}
+- Description: {(disease_ctx.get('disease_info') or {}).get('description', 'N/A')}
+- Symptoms: {(disease_ctx.get('disease_info') or {}).get('symptoms', 'N/A')}
+- Treatment: {(disease_ctx.get('disease_info') or {}).get('treatment', 'N/A')}
+- Prevention: {(disease_ctx.get('disease_info') or {}).get('prevention', 'N/A')}
 
 Give practical farming advice. Keep responses concise."""
     else:
@@ -240,35 +269,39 @@ Give practical farming advice. Keep responses concise."""
 No image has been analysed yet. Encourage the user to upload a tomato leaf image.
 You can still answer general tomato disease questions."""
 
-    # Format messages for ollama
     ollama_messages = [{"role": "system", "content": system}]
     for m in messages:
         ollama_messages.append({"role": m["role"], "content": m["content"]})
 
     try:
-        response = ollama_chat(
-            model="llama3.2",
-            messages=ollama_messages,
-        )
-        reply = response["message"]["content"]
+        from ollama import chat as ollama_chat
+        response = ollama_chat(model="llama3.2", messages=ollama_messages)
+        reply    = response["message"]["content"]
     except Exception as e:
         logger.error(f"Ollama error: {e}")
         raise HTTPException(status_code=500, detail="Llama model error")
 
-    # Save to MongoDB
-    prediction_collection.database["chat_sessions"].update_one(
+    # Save to chat_collection directly
+    chat_collection.update_one(
         {"session_id": session_id},
         {
-            "$set":        {"updated_at": datetime.now(timezone.utc), "disease_context": disease_ctx},
-            "$push":       {"messages": {"$each": [messages[-1], {"role": "assistant", "content": reply}]}},
-            "$setOnInsert":{"session_id": session_id, "created_at": datetime.now(timezone.utc)},
+            "$set"        : {"updated_at": datetime.now(timezone.utc), "disease_context": disease_ctx, "scan_id": scan_id},
+            "$push"       : {"messages": {"$each": [messages[-1], {"role": "assistant", "content": reply}]}},
+            "$setOnInsert": {"session_id": session_id, "created_at": datetime.now(timezone.utc)},
         },
         upsert=True,
     )
 
     return {"reply": reply}
 
-#api route for chat history
+@app.get("/chat/by-scan/{scan_id}")
+async def get_chat_by_scan_endpoint(scan_id: str):
+    """Return existing chat messages for a scan."""
+    session = get_chat_by_scan(scan_id)
+    if not session:
+        return {"messages": [], "has_chat": False}
+    return {"messages": session.get("messages", []), "has_chat": True}
+
 @app.get("/chat/history")
 async def chat_history(sessionId: str = None):
     db = prediction_collection.database
@@ -284,3 +317,33 @@ async def chat_history(sessionId: str = None):
     for s in sessions:
         s["_id"] = str(s["_id"])
     return sessions
+
+@app.delete("/history/scans/{scan_id}")
+async def delete_scan(scan_id: str):
+    try:
+        obj_id = ObjectId(scan_id)
+
+        scan = prediction_collection.find_one({"_id": obj_id})
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        # delete image
+        image_path = scan.get("image_path")
+        if image_path:
+            full_path = os.path.join(BASE_DIR, image_path)
+            if os.path.exists(full_path):
+                os.remove(full_path)
+
+        # delete scan
+        prediction_collection.delete_one({"_id": obj_id})
+
+        # delete chats linked to scan
+        prediction_collection.database["chat_sessions"].delete_many({
+            "scan_id": scan_id
+        })
+
+        return {"message": "Scan and related chat deleted successfully"}
+
+    except Exception as e:
+        logger.error(f"Delete error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete scan")
