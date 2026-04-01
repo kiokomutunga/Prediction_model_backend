@@ -125,12 +125,12 @@ async def predict(file: UploadFile = File(...)):
     POST a tomato leaf image → get back the predicted disease.
 
     Returns:
-        _id          – MongoDB document ID for feedback linking
-        prediction   – disease name or 'Unknown'
-        confidence   – model certainty (0-1)
-        image_path   – where the upload was saved
-        disease_info – treatment/symptoms from DB
-        is_critical  – true if disease needs urgent attention
+        _id          MongoDB document ID for feedback linking
+        prediction   disease name or 'Unknown'
+        confidence   model certainty (0-1)
+        image_path   where the upload was saved
+        disease_info treatment/symptoms from DB
+        is_critical  true if disease needs urgent attention
     """
     # 1. Validate file type before reading anything
     ext = validate_file(file.filename)
