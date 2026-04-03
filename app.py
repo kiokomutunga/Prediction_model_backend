@@ -14,34 +14,26 @@ from ollama import chat as ollama_chat
 
 from database import get_disease_info, prediction_collection, get_all_diseases,  get_disease_for_scan,    get_chat_by_scan, chat_collection
 from routers.stats import router as stats_router    # ← added
-
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 # config
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model", "twolayer.keras")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "predictions")
 UPLOADS_ROOT = os.path.join(BASE_DIR, "uploads")
-
 ALLOWED_EXTENSIONS   = {"jpg", "jpeg", "png", "webp"}
 IMG_SIZE             = (256, 256)       
 CONFIDENCE_THRESHOLD = 0.70            
-
 CRITICAL_DISEASES = {                  
     "Late_blight",
     "Tomato_Yellow_Leaf_Curl_Virus",
 }
-
 CLASS_NAMES = [
     "Bacterial_spot", "Early_blight", "Late_blight", "Leaf_Mold",
     "Septoria_leaf_spot", "Spider_mites", "Target_Spot",
     "Tomato_Yellow_Leaf_Curl_Virus", "Tomato_mosaic_virus", "Healthy",
 ]
-
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 #Lifespan load model once at startup 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,10 +41,8 @@ async def lifespan(app: FastAPI):
     logger.info("Model loaded successfully.")
     yield
     logger.info("Server shutting down.")
-
 #App
 app = FastAPI(title="Tomato Disease Detection API", lifespan=lifespan)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,12 +51,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT), name="uploads")
-
 #Register routers
 app.include_router(stats_router)
-
 #Helpers
-
 def validate_file(filename: str) -> str:
     """Reject unsupported file types."""
     ext = filename.rsplit(".", 1)[-1].lower()
@@ -76,16 +63,12 @@ def validate_file(filename: str) -> str:
             detail=f"Unsupported file type '.{ext}'. Allowed: {ALLOWED_EXTENSIONS}",
         )
     return ext
-
-
 def save_upload(file_bytes: bytes, ext: str) -> str:
     filename = f"{uuid.uuid4()}.{ext}"
     full_path = os.path.join(UPLOAD_DIR, filename)
     with open(full_path, "wb") as f:
         f.write(file_bytes)
     return f"uploads/predictions/{filename}"
-
-
 def preprocess(file_bytes: bytes) -> np.ndarray:
     """Convert raw image bytes into model-ready tensor."""
     try:
@@ -96,16 +79,12 @@ def preprocess(file_bytes: bytes) -> np.ndarray:
     img = img.resize(IMG_SIZE)
     arr = keras_image.img_to_array(img) / 255.0
     return np.expand_dims(arr, axis=0)
-
-
 def run_inference(model, img_tensor: np.ndarray) -> tuple[str, float]:
     """Run model and return (class_name, confidence)."""
     preds      = model.predict(img_tensor)
     confidence = float(np.max(preds))
     cls        = CLASS_NAMES[int(np.argmax(preds))]
     return cls, confidence
-
-
 def log_to_db(predicted_class: str, confidence: float, image_path: str) -> str:
     """Persist prediction to MongoDB and return the inserted ID."""
     result = prediction_collection.insert_one({
@@ -116,9 +95,7 @@ def log_to_db(predicted_class: str, confidence: float, image_path: str) -> str:
         "is_critical" : predicted_class in CRITICAL_DISEASES,  # ← added
     })
     return str(result.inserted_id)
-
 #Predict endpoint
-
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     """
@@ -170,7 +147,6 @@ async def predict(file: UploadFile = File(...)):
         "disease_info" : disease_info,
         "is_critical"  : predicted_class in CRITICAL_DISEASES,
     }
-
 @app.get("/diseases/")
 async def fetch_diseases():
         
@@ -196,8 +172,6 @@ async def fetch_disease_by_key(key: str):
     except Exception as e:
         logger.error(f"Error fetching disease {key}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch disease")
-
-
 @app.get("/history/scans")
 async def get_scan_history(limit: int = 50):
     try:
@@ -232,8 +206,6 @@ async def get_scan_history(limit: int = 50):
     except Exception as e:
         logger.error(f"Error fetching scan history: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch scan history")
-
-
 @app.post("/chat")
 async def chat_endpoint(req: dict):
     messages    = req.get("messages", [])
@@ -251,7 +223,6 @@ async def chat_endpoint(req: dict):
                 "confidence"  : scan["confidence"] / 100,
                 "disease_info": disease_info,
             }
-
     # Build system prompt
     if disease_ctx:
         system = f"""You are an expert tomato disease assistant helping farmers.
@@ -262,7 +233,6 @@ The AI model detected:
 - Symptoms: {(disease_ctx.get('disease_info') or {}).get('symptoms', 'N/A')}
 - Treatment: {(disease_ctx.get('disease_info') or {}).get('treatment', 'N/A')}
 - Prevention: {(disease_ctx.get('disease_info') or {}).get('prevention', 'N/A')}
-
 Give practical farming advice. Keep responses concise."""
     else:
         system = """You are a helpful tomato disease expert.
@@ -293,7 +263,6 @@ You can still answer general tomato disease questions."""
     )
 
     return {"reply": reply}
-
 @app.get("/chat/by-scan/{scan_id}")
 async def get_chat_by_scan_endpoint(scan_id: str):
     """Return existing chat messages for a scan."""
