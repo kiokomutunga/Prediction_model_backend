@@ -286,7 +286,6 @@ async def chat_history(sessionId: str = None):
         if "updated_at" in session:
             session["updated_at"] = session["updated_at"].isoformat()
         return session
-
     sessions = list(chat_collection.find().sort("updated_at", -1).limit(20))
     result = []
     for s in sessions:
