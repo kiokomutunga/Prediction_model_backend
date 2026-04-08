@@ -10,10 +10,13 @@ import io, os, uuid, logging
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 from fastapi.staticfiles import StaticFiles
+from groq import Groq
+from dotenv import load_dotenv
 from ollama import chat as ollama_chat
 
 from database import get_disease_info, prediction_collection, get_all_diseases,  get_disease_for_scan,    get_chat_by_scan, chat_collection
 from routers.stats import router as stats_router
+load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 # config
@@ -34,6 +37,7 @@ CLASS_NAMES = [
     "Tomato_Yellow_Leaf_Curl_Virus", "Tomato_mosaic_virus", "Healthy",
 ]
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 #Lifespan load model once at startup 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -213,54 +217,91 @@ async def chat_endpoint(req: dict):
     session_id  = req.get("sessionId")
     scan_id     = req.get("scanId")
 
-    # If no disease context came from frontend, fetch it from DB using scan_id
+    # Fetch disease context from DB if not provided
     if not disease_ctx and scan_id:
-        scan = prediction_collection.find_one({"_id": __import__("bson").ObjectId(scan_id)})
-        if scan:
-            disease_info = get_disease_for_scan(scan["prediction"])
-            disease_ctx  = {
-                "prediction"  : scan["prediction"],
-                "confidence"  : scan["confidence"] / 100,
-                "disease_info": disease_info,
-            }
+        try:
+            scan = prediction_collection.find_one({"_id": ObjectId(scan_id)})
+            if scan:
+                disease_info = get_disease_for_scan(scan["prediction"])
+                disease_ctx  = {
+                    "prediction"  : scan["prediction"],
+                    "confidence"  : scan["confidence"] / 100,
+                    "disease_info": disease_info,
+                }
+        except Exception:
+            pass
+
     # Build system prompt
     if disease_ctx:
-        system = f"""You are an expert tomato disease assistant helping farmers.
+        system = f"""You are an expert tomato disease assistant helping farmers and agronomists.
 The AI model detected:
-- Disease: {disease_ctx.get('prediction')}
+- Disease: {disease_ctx.get('prediction', 'N/A')}
 - Confidence: {disease_ctx.get('confidence', 0) * 100:.1f}%
 - Description: {(disease_ctx.get('disease_info') or {}).get('description', 'N/A')}
 - Symptoms: {(disease_ctx.get('disease_info') or {}).get('symptoms', 'N/A')}
 - Treatment: {(disease_ctx.get('disease_info') or {}).get('treatment', 'N/A')}
 - Prevention: {(disease_ctx.get('disease_info') or {}).get('prevention', 'N/A')}
-Give practical farming advice. Keep responses concise."""
-    else:
-        system = """You are a helpful tomato disease expert.
-No image has been analysed yet. Encourage the user to upload a tomato leaf image.
-You can still answer general tomato disease questions."""
 
-    ollama_messages = [{"role": "system", "content": system}]
+Rules:
+- Give practical, actionable farming advice
+- Keep responses under 150 words
+- Use simple language a farmer understands
+- If asked something unrelated to tomatoes, politely redirect"""
+    else:
+        system = """You are a helpful tomato disease expert assistant.
+No image has been analysed yet. You can answer general tomato disease questions.
+Encourage the user to upload a tomato leaf image for a specific diagnosis.
+Keep responses under 150 words."""
+
+    # Build messages for Groq — filter out system role from history
+    groq_messages = []
     for m in messages:
-        ollama_messages.append({"role": m["role"], "content": m["content"]})
+        if m.get("role") in ("user", "assistant") and m.get("content", "").strip():
+            groq_messages.append({
+                "role"   : m["role"],
+                "content": m["content"],
+            })
 
     try:
-        from ollama import chat as ollama_chat
-        response = ollama_chat(model="llama3.2", messages=ollama_messages)
-        reply    = response["message"]["content"]
-    except Exception as e:
-        logger.error(f"Ollama error: {e}")
-        raise HTTPException(status_code=500, detail="Llama model error")
+        response = groq_client.chat.completions.create(
+            model      = "llama-3.3-70b-versatile",   # fast, free, good quality
+            messages   = [{"role": "system", "content": system}] + groq_messages,
+            max_tokens = 512,
+            temperature= 0.7,
+        )
+        reply = response.choices[0].message.content
 
-    # Save to chat_collection directly
-    chat_collection.update_one(
-        {"session_id": session_id},
-        {
-            "$set"        : {"updated_at": datetime.now(timezone.utc), "disease_context": disease_ctx, "scan_id": scan_id},
-            "$push"       : {"messages": {"$each": [messages[-1], {"role": "assistant", "content": reply}]}},
-            "$setOnInsert": {"session_id": session_id, "created_at": datetime.now(timezone.utc)},
-        },
-        upsert=True,
-    )
+    except Exception as e:
+        logger.error(f"Groq error: {e}")
+        raise HTTPException(status_code=500, detail=f"Chat model error: {str(e)}")
+
+    # Save to MongoDB
+    try:
+        chat_collection.update_one(
+            {"session_id": session_id},
+            {
+                "$set"        : {
+                    "updated_at"      : datetime.now(timezone.utc),
+                    "disease_context" : disease_ctx,
+                    "scan_id"         : scan_id,
+                },
+                "$push"       : {
+                    "messages": {
+                        "$each": [
+                            messages[-1],
+                            {"role": "assistant", "content": reply},
+                        ]
+                    }
+                },
+                "$setOnInsert": {
+                    "session_id": session_id,
+                    "created_at": datetime.now(timezone.utc),
+                },
+            },
+            upsert=True,
+        )
+    except Exception as e:
+        logger.warning(f"Chat save warning: {e}")
 
     return {"reply": reply}
 @app.get("/chat/by-scan/{scan_id}")
