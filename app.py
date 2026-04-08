@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from ollama import chat as ollama_chat
 
 from database import get_disease_info, prediction_collection, get_all_diseases,  get_disease_for_scan,    get_chat_by_scan, chat_collection
-from routers.stats import router as stats_router    # ← added
+from routers.stats import router as stats_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 # config
