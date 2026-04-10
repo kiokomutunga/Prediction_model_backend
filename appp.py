@@ -10,10 +10,11 @@ import io, os, uuid, logging
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 from fastapi.staticfiles import StaticFiles
+from groq import Groq
 from ollama import chat as ollama_chat
 
 from database import get_disease_info, prediction_collection, get_all_diseases,  get_disease_for_scan,    get_chat_by_scan, chat_collection
-from routers.stats import router as stats_router    # ← added
+from routers.stats import router as stats_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 # config
@@ -34,6 +35,7 @@ CLASS_NAMES = [
     "Tomato_Yellow_Leaf_Curl_Virus", "Tomato_mosaic_virus", "Healthy",
 ]
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 #Lifespan load model once at startup 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -273,20 +275,29 @@ async def get_chat_by_scan_endpoint(scan_id: str):
 
 @app.get("/chat/history")
 async def chat_history(sessionId: str = None):
-    db = prediction_collection.database
+    db = chat_collection.database
 
     if sessionId:
-        session = db["chat_sessions"].find_one({"session_id": sessionId})
+        session = chat_collection.find_one({"session_id": sessionId})
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         session["_id"] = str(session["_id"])
+        # normalize dates
+        if "created_at" in session:
+            session["created_at"] = session["created_at"].isoformat()
+        if "updated_at" in session:
+            session["updated_at"] = session["updated_at"].isoformat()
         return session
-
-    sessions = list(db["chat_sessions"].find().sort("created_at", -1).limit(20))
+    sessions = list(chat_collection.find().sort("updated_at", -1).limit(20))
+    result = []
     for s in sessions:
         s["_id"] = str(s["_id"])
-    return sessions
-
+        # normalize for frontend
+        s["sessionId"]  = s.get("session_id", "")
+        s["createdAt"]  = s["created_at"].isoformat()  if s.get("created_at")  else None
+        s["updatedAt"]  = s["updated_at"].isoformat()  if s.get("updated_at")  else None
+        result.append(s)
+    return result
 @app.delete("/history/scans/{scan_id}")
 async def delete_scan(scan_id: str):
     try:
