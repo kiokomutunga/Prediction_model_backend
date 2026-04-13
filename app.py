@@ -253,7 +253,7 @@ No image has been analysed yet. You can answer general tomato disease questions.
 Encourage the user to upload a tomato leaf image for a specific diagnosis.
 Keep responses under 150 words."""
 
-    # Build messages for Groq — filter out system role from history
+    #Build messages for Groq 
     groq_messages = []
     for m in messages:
         if m.get("role") in ("user", "assistant") and m.get("content", "").strip():
