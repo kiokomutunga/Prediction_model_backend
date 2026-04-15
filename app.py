@@ -116,7 +116,7 @@ async def predict(file: UploadFile = File(...)):
     # 1. Validate file type before reading anything
     ext = validate_file(file.filename)
 
-    # 2. Read bytes once — reused for saving AND inference
+    # 2. Read bytes once reused for saving AND inference
     contents = await file.read()    
 
     # 4. Preprocess for the model
@@ -163,6 +163,7 @@ async def fetch_diseases():
     except Exception as e:
         logger.error(f"error fetching diseases {str(e)}")
         raise HTTPException(status_code = 400, detail= "failed to fetch diseases")
+    
 @app.get("/diseases/{key}")
 async def fetch_disease_by_key(key: str):
     """Fetch a single disease by its key e.g. Early_blight, Healthy"""
@@ -176,6 +177,7 @@ async def fetch_disease_by_key(key: str):
     except Exception as e:
         logger.error(f"Error fetching disease {key}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch disease")
+    
 @app.get("/history/scans")
 async def get_scan_history(limit: int = 50):
     try:
@@ -210,6 +212,7 @@ async def get_scan_history(limit: int = 50):
     except Exception as e:
         logger.error(f"Error fetching scan history: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch scan history")
+    
 @app.post("/chat")
 async def chat_endpoint(req: dict):
     messages    = req.get("messages", [])
@@ -304,6 +307,7 @@ Keep responses under 150 words."""
         logger.warning(f"Chat save warning: {e}")
 
     return {"reply": reply}
+
 @app.get("/chat/by-scan/{scan_id}")
 async def get_chat_by_scan_endpoint(scan_id: str):
     """Return existing chat messages for a scan."""
